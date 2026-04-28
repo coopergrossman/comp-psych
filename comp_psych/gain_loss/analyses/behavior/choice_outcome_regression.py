@@ -11,7 +11,7 @@ import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
-from compPsych.gain_loss.load import load_gain_loss_data
+from comp_psych.gain_loss.load import load_gain_loss_data
 
 
 def choice_outcome_regression(subselect=None, plot_flag=True, num_trials=5):

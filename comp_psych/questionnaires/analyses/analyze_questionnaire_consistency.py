@@ -8,7 +8,7 @@ analyze questionnaire consistency
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from compPsych.questionnaires.load import load_scores, load_subscales, load_questions, aggregate_sessions
+from comp_psych.questionnaires.load import load_scores, load_subscales, load_questions, aggregate_sessions
 
 
 def _prepare_df(df, questionnaire):

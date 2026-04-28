@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C c:/Users/cooper/Documents/githubRepositories/comp-psych log --all --oneline)",
+      "Bash(python -m comp_psych.questionnaires.export.fb_export_questionnaires --spell s4_groupA)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(python -c \"from comp_psych.questionnaires.export import fb_export_questionnaires\")",
+      "Bash(rm stdout.log stderr.log)",
+      "PowerShell(python -c \"from comp_psych.questionnaires.export import fb_export_questionnaires\")",
+      "PowerShell(python --version)",
+      "PowerShell(python -c \"print\\('hello'\\)\")",
+      "PowerShell(python -c \"from questionnaires.config import FB_CREDENTIALS_FILE\")"
+    ]
+  }
+}

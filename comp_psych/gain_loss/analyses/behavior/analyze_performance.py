@@ -9,7 +9,7 @@ gain-loss behavior performance analysis
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from compPsych.gain_loss.load import load_gain_loss_data
+from comp_psych.gain_loss.load import load_gain_loss_data
 
 
 def analyze_performance(subselect=None, plot_flag=True):

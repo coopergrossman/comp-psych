@@ -16,8 +16,8 @@ import os.path
 from os import listdir
 import csv
 from pathlib import Path
-from compPsych.gain_loss.config import DATA_DIR, DESIGNS_DIR
-from compPsych.core.env import FB_CREDENTIALS_FILE, DEMOGRAPHICS_DIR
+from comp_psych.gain_loss.config import DATA_DIR, DESIGNS_DIR
+from comp_psych.core.env import FB_CREDENTIALS_FILE, DEMOGRAPHICS_DIR
 
 
 def json_serial(obj):

@@ -9,10 +9,10 @@ fit stan models to behavior
 import numpy as np
 import pandas as pd
 import os
-from compPsych.gain_loss.load import load_gain_loss_data
-from compPsych.core.modeling import compute_map_estimates
-from compPsych.gain_loss.modeling import get_param_names
-from compPsych.gain_loss.config import MODEL_DIR, MODEL_SAVE_DIR
+from comp_psych.gain_loss.load import load_gain_loss_data
+from comp_psych.core.modeling import compute_map_estimates
+from comp_psych.gain_loss.modeling import get_param_names
+from comp_psych.gain_loss.config import MODEL_DIR, MODEL_SAVE_DIR
 from cmdstanpy import CmdStanModel
 
 

@@ -9,9 +9,9 @@ compute bonuses for gain-loss behavior
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from compPsych.gain_loss.analyses.behavior.analyze_performance import analyze_performance
-from compPsych.core.env import DEMOGRAPHICS_DIR
-from compPsych.gain_loss.config import DATA_DIR
+from comp_psych.gain_loss.analyses.behavior.analyze_performance import analyze_performance
+from comp_psych.core.env import DEMOGRAPHICS_DIR
+from comp_psych.gain_loss.config import DATA_DIR
 import os
 
 

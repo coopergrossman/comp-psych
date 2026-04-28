@@ -9,7 +9,7 @@ gain-loss behavior performance change over sessions analysis
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from compPsych.gain_loss.analyses.behavior.analyze_performance import analyze_performance
+from comp_psych.gain_loss.analyses.behavior.analyze_performance import analyze_performance
 
 def analyze_performance_change(subselect=None, plot_flag=True):
     

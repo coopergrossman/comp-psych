@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import os
 from scipy.stats import gaussian_kde
-from compPsych.gain_loss.config import MODEL_SAVE_DIR
+from comp_psych.gain_loss.config import MODEL_SAVE_DIR
 
 def get_param_names(model_name):
     if model_name == 'q':

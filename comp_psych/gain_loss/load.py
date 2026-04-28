@@ -8,8 +8,8 @@ utilities for gain_loss data
 
 import pandas as pd
 import numpy as np
-from compPsych.gain_loss.config import DATA_DIR
-from compPsych.core.selection import subselect_data
+from comp_psych.gain_loss.config import DATA_DIR
+from comp_psych.core.selection import subselect_data
 
 def load_gain_loss_data(subselect=None, subselect_defaults=True):
     df = pd.read_parquet(f'{DATA_DIR}\\all_data.parquet')

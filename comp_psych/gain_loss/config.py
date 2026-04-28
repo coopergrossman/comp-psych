@@ -7,7 +7,7 @@ task constants and configurations for gain_loss task
 
 """
 
-from compPsych.core.env import DATA_ROOT, TASK_ROOT
+from comp_psych.core.env import DATA_ROOT, TASK_ROOT
 from pathlib import Path
 
 TASK_NAME = "gain_loss"

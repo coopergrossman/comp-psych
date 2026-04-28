@@ -115,7 +115,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 from collections import defaultdict
-from questionnaires.config import FB_CREDENTIALS_FILE, QUESTIONNAIRE_DIR, DEMOGRAPHICS_DIR
+from comp_psych.core.env import FB_CREDENTIALS_FILE, DEMOGRAPHICS_DIR, QUESTIONNAIRE_DIR
 
 
 @contextmanager
@@ -785,7 +785,8 @@ def main():
     )
     ap.add_argument(
         "--questionnaire",
-        required=True,
+        required=False,
+        default=None,
         help="Questionnaire ID (questionnaire) (e.g., 'dass21')"
     )
     ap.add_argument(
@@ -851,141 +852,147 @@ def main():
     # Use original spell for querying Firestore
     normalized_spell = normalize_spell(args.spell)
 
-    # Get questionnaire configuration
-    questionnaire_config = get_questionnaire_config(args.questionnaire)
-    
-    print(f"[Export] Starting export...")
-    print(f"[Export] Project: {db.project}")
-    print(f"[Export] Spell (query): {args.spell}")
-    print(f"[Export] Spell (filename): {normalized_spell}")
-    print(f"[Export] Questionnaire: {questionnaire_config['name']}")
-    
-    # Load completed participants from subject_list CSV (unless --all is specified)
-    if args.all:
-        print(f"[Export] --all flag specified: downloading all files regardless of subject_list")
-        completed_participants = None
+    if not args.questionnaire:
+        questionnaires = ["dass21", "ocir", "spq", "demography"]
     else:
-        completed_participants = load_completed_participants(args.spell)
-    
-    if args.prolific_id:
-        print(f"[Export] Filtering by prolificId: {args.prolific_id}")
-        # If specific prolific_id is provided and not using --all, check if it's in completed list
-        if not args.all and completed_participants and args.prolific_id not in completed_participants:
-            print(f"[Export] Warning: {args.prolific_id} is not in the completed participants list")
-    else:
-        if not args.all and completed_participants:
-            print(f"[Export] Filtering to {len(completed_participants)} participant(s) with all modules complete and status approved")
-        elif args.all:
-            print(f"[Export] Downloading all participants in session (subject_list filtering disabled)")
-    
-    # Export questionnaire module documents
-    # If --all is specified, allow all participants (allowed_ids = None)
-    # If specific prolific_id is provided, only use filter if it's in completed list
-    # Otherwise, use completed_participants set to filter all
-    allowed_ids = None
-    if args.all:
-        # --all flag: download all participants regardless of subject_list
+        questionnaires = [args.questionnaire]
+
+    for questionnaire in questionnaires:
+        # Get questionnaire configuration
+        questionnaire_config = get_questionnaire_config(questionnaire)
+        
+        print(f"[Export] Starting export...")
+        print(f"[Export] Project: {db.project}")
+        print(f"[Export] Spell (query): {args.spell}")
+        print(f"[Export] Spell (filename): {normalized_spell}")
+        print(f"[Export] Questionnaire: {questionnaire_config['name']}")
+        
+        # Load completed participants from subject_list CSV (unless --all is specified)
+        if args.all:
+            print(f"[Export] --all flag specified: downloading all files regardless of subject_list")
+            completed_participants = None
+        else:
+            completed_participants = load_completed_participants(args.spell)
+        
+        if args.prolific_id:
+            print(f"[Export] Filtering by prolificId: {args.prolific_id}")
+            # If specific prolific_id is provided and not using --all, check if it's in completed list
+            if not args.all and completed_participants and args.prolific_id not in completed_participants:
+                print(f"[Export] Warning: {args.prolific_id} is not in the completed participants list")
+        else:
+            if not args.all and completed_participants:
+                print(f"[Export] Filtering to {len(completed_participants)} participant(s) with all modules complete and status approved")
+            elif args.all:
+                print(f"[Export] Downloading all participants in session (subject_list filtering disabled)")
+        
+        # Export questionnaire module documents
+        # If --all is specified, allow all participants (allowed_ids = None)
+        # If specific prolific_id is provided, only use filter if it's in completed list
+        # Otherwise, use completed_participants set to filter all
         allowed_ids = None
-    elif args.prolific_id:
-        # If specific ID provided, only filter if it's not in completed list (will be filtered out)
-        if completed_participants and args.prolific_id not in completed_participants:
-            allowed_ids = set()  # Empty set means no participants will match
-    else:
-        allowed_ids = completed_participants
-    
-    questionnaire_by_subject = export_questionnaire_modules(
-        db,
-        args.spell,
-        prolific_id_filter=args.prolific_id,
-        allowed_prolific_ids=allowed_ids,
-        questionnaire=args.questionnaire,
-    )
-    
-    if not questionnaire_by_subject:
-        print("[Export] No questionnaire module documents found matching criteria")
-        return
-    
-    # Check if any output files already exist before writing (based on output mode)
-    existing_files = []
-    
-    if args.output_mode in ["individual", "both"]:
-        # Check individual files
-        for prolific_id in questionnaire_by_subject.keys():
-            filename = f"q_{args.questionnaire}_{prolific_id}_{normalized_spell}.csv"
-            filepath = os.path.join(args.out, filename)
-            if os.path.exists(filepath):
-                existing_files.append(filename)
-    
-    if args.output_mode in ["aggregated", "both"]:
-        # Check aggregated file
-        aggregated_filename = f"q_{args.questionnaire}_{normalized_spell}.csv"
-        aggregated_filepath = os.path.join(args.out, aggregated_filename)
-        if os.path.exists(aggregated_filepath):
-            existing_files.append(aggregated_filename)
-    
-    if existing_files:
-        print("[Export] Error: The following file(s) already exist and would be overwritten:")
-        for filename in existing_files:
-            print(f"[Export]   - {filename}")
-        print("[Export] Please remove or rename existing files before running the export.")
-        return
-    
-    # Transform data for all subjects (needed for both individual and aggregated modes)
-    all_subject_data = {}
-    prolific_ids_list = []
-    for prolific_id, module_data in questionnaire_by_subject.items():
-        rows = transform_to_long_format(module_data, questionnaire_config)
-        all_subject_data[prolific_id] = rows
-        prolific_ids_list.append(prolific_id)
-    
-    # Write individual CSV files if requested
-    if args.output_mode in ["individual", "both"]:
-        for prolific_id in prolific_ids_list:
-            filename = f"q_{args.questionnaire}_{prolific_id}_{normalized_spell}.csv"
-            filepath = os.path.join(args.out, filename)
-            rows = all_subject_data[prolific_id]
-            
-            print(f"[Export] Writing {len(rows)} row(s) to {filename}...")
-            write_csv(filepath, rows)
-            print(f"[Export] ✓ Saved {filename}")
-    
-    # Create aggregated CSV if requested
-    if args.output_mode in ["aggregated", "both"]:
-        if args.output_mode == "aggregated":
-            # For aggregated-only mode, write temporary individual files first, then aggregate
-            temp_files = []
+        if args.all:
+            # --all flag: download all participants regardless of subject_list
+            allowed_ids = None
+        elif args.prolific_id:
+            # If specific ID provided, only filter if it's not in completed list (will be filtered out)
+            if completed_participants and args.prolific_id not in completed_participants:
+                allowed_ids = set()  # Empty set means no participants will match
+        else:
+            allowed_ids = completed_participants
+        
+        questionnaire_by_subject = export_questionnaire_modules(
+            db,
+            args.spell,
+            prolific_id_filter=args.prolific_id,
+            allowed_prolific_ids=allowed_ids,
+            questionnaire=questionnaire,
+        )
+        
+        if not questionnaire_by_subject:
+            print("[Export] No questionnaire module documents found matching criteria")
+            return
+        
+        # Check if any output files already exist before writing (based on output mode)
+        existing_files = []
+        
+        if args.output_mode in ["individual", "both"]:
+            # Check individual files
+            for prolific_id in questionnaire_by_subject.keys():
+                filename = f"q_{questionnaire}_{prolific_id}_{normalized_spell}.csv"
+                filepath = os.path.join(args.out, filename)
+                if os.path.exists(filepath):
+                    existing_files.append(filename)
+        
+        if args.output_mode in ["aggregated", "both"]:
+            # Check aggregated file
+            aggregated_filename = f"q_{questionnaire}_{normalized_spell}.csv"
+            aggregated_filepath = os.path.join(args.out, aggregated_filename)
+            if os.path.exists(aggregated_filepath):
+                existing_files.append(aggregated_filename)
+        
+        if existing_files:
+            print("[Export] Error: The following file(s) already exist and would be overwritten:")
+            for filename in existing_files:
+                print(f"[Export]   - {filename}")
+            print("[Export] Please remove or rename existing files before running the export.")
+            return
+        
+        # Transform data for all subjects (needed for both individual and aggregated modes)
+        all_subject_data = {}
+        prolific_ids_list = []
+        for prolific_id, module_data in questionnaire_by_subject.items():
+            rows = transform_to_long_format(module_data, questionnaire_config)
+            all_subject_data[prolific_id] = rows
+            prolific_ids_list.append(prolific_id)
+        
+        # Write individual CSV files if requested
+        if args.output_mode in ["individual", "both"]:
             for prolific_id in prolific_ids_list:
-                filename = f"q_{args.questionnaire}_{prolific_id}_{normalized_spell}.csv"
+                filename = f"q_{questionnaire}_{prolific_id}_{normalized_spell}.csv"
                 filepath = os.path.join(args.out, filename)
                 rows = all_subject_data[prolific_id]
+                
+                print(f"[Export] Writing {len(rows)} row(s) to {filename}...")
                 write_csv(filepath, rows)
-                temp_files.append(prolific_id)
-            
-            print(f"[Export] Aggregating {len(temp_files)} subject file(s) into combined CSV...")
-            aggregated_path = aggregate_csv_files(args.out, normalized_spell, temp_files, questionnaire=args.questionnaire)
-            
-            # Remove temporary individual files
-            for prolific_id in temp_files:
-                filename = f"q_{args.questionnaire}_{prolific_id}_{normalized_spell}.csv"
-                filepath = os.path.join(args.out, filename)
-                os.remove(filepath)
-        else:
-            # For "both" mode, aggregate from existing individual files
-            print(f"[Export] Aggregating {len(prolific_ids_list)} subject file(s) into combined CSV...")
-            aggregated_path = aggregate_csv_files(args.out, normalized_spell, prolific_ids_list)
+                print(f"[Export] ✓ Saved {filename}")
         
-        # Count total rows in aggregated file
-        with open(aggregated_path, "r", encoding="utf-8") as f:
-            row_count = sum(1 for _ in csv.DictReader(f))
-        print(f"[Export] ✓ Saved aggregated file: {os.path.basename(aggregated_path)} ({row_count} row(s))")
-    
-    # Print summary
-    if args.output_mode == "individual":
-        print(f"[Export] Done! Exported {len(questionnaire_by_subject)} individual subject file(s) to {args.out}")
-    elif args.output_mode == "aggregated":
-        print(f"[Export] Done! Exported 1 aggregated file to {args.out}")
-    else:  # both
-        print(f"[Export] Done! Exported {len(questionnaire_by_subject)} subject file(s) and 1 aggregated file to {args.out}")
+        # Create aggregated CSV if requested
+        if args.output_mode in ["aggregated", "both"]:
+            if args.output_mode == "aggregated":
+                # For aggregated-only mode, write temporary individual files first, then aggregate
+                temp_files = []
+                for prolific_id in prolific_ids_list:
+                    filename = f"q_{questionnaire}_{prolific_id}_{normalized_spell}.csv"
+                    filepath = os.path.join(args.out, filename)
+                    rows = all_subject_data[prolific_id]
+                    write_csv(filepath, rows)
+                    temp_files.append(prolific_id)
+                
+                print(f"[Export] Aggregating {len(temp_files)} subject file(s) into combined CSV...")
+                aggregated_path = aggregate_csv_files(args.out, normalized_spell, temp_files, questionnaire=questionnaire)
+                
+                # Remove temporary individual files
+                for prolific_id in temp_files:
+                    filename = f"q_{questionnaire}_{prolific_id}_{normalized_spell}.csv"
+                    filepath = os.path.join(args.out, filename)
+                    os.remove(filepath)
+            else:
+                # For "both" mode, aggregate from existing individual files
+                print(f"[Export] Aggregating {len(prolific_ids_list)} subject file(s) into combined CSV...")
+                aggregated_path = aggregate_csv_files(args.out, normalized_spell, prolific_ids_list, questionnaire=questionnaire)
+            
+            # Count total rows in aggregated file
+            with open(aggregated_path, "r", encoding="utf-8") as f:
+                row_count = sum(1 for _ in csv.DictReader(f))
+            print(f"[Export] ✓ Saved aggregated file: {os.path.basename(aggregated_path)} ({row_count} row(s))")
+        
+        # Print summary
+        if args.output_mode == "individual":
+            print(f"[Export] Done! Exported {len(questionnaire_by_subject)} individual subject file(s) to {args.out}")
+        elif args.output_mode == "aggregated":
+            print(f"[Export] Done! Exported 1 aggregated file to {args.out}")
+        else:  # both
+            print(f"[Export] Done! Exported {len(questionnaire_by_subject)} subject file(s) and 1 aggregated file to {args.out}")
 
 if __name__ == "__main__":
     main()

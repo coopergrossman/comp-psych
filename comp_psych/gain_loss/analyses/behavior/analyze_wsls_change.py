@@ -9,7 +9,7 @@ gain-loss win-stay behavior change over sessions analysis
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from compPsych.gain_loss.analyses.behavior.analyze_wsls import analyze_wsls
+from comp_psych.gain_loss.analyses.behavior.analyze_wsls import analyze_wsls
 
 def analyze_wsls_change(subselect=None, plot_flag=True):
     

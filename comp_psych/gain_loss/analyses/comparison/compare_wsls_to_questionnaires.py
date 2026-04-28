@@ -8,8 +8,8 @@ compare gain_loss win-stay lose-shift behavior to questionnaire wsls
 
 import pandas as pd
 import numpy as np
-from compPsych.gain_loss.analyses.behavior.analyze_wsls import analyze_wsls
-from compPsych.questionnaires.load import load_subscales, aggregate_sessions, load_questions
+from comp_psych.gain_loss.analyses.behavior.analyze_wsls import analyze_wsls
+from comp_psych.questionnaires.load import load_subscales, aggregate_sessions, load_questions
 import os
 import statsmodels.api as sm
 import statsmodels.formula.api as smf

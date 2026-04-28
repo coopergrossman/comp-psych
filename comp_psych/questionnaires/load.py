@@ -9,8 +9,8 @@ utilities for gain_loss data
 import pandas as pd
 import numpy as np
 import os
-from compPsych.core.env import QUESTIONNAIRE_DIR
-from compPsych.core.selection import subselect_data
+from comp_psych.core.env import QUESTIONNAIRE_DIR
+from comp_psych.core.selection import subselect_data
 
 def load_scores(questionnaire, subselect=None):
 

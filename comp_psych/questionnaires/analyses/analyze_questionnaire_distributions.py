@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as stats
-from compPsych.questionnaires.load import load_scores, load_subscales, load_questions
+from comp_psych.questionnaires.load import load_scores, load_subscales, load_questions
 
 
 def plot_response_distributions(df, df_name, questionnaire):
