@@ -1,0 +1,96 @@
+"""
+created 25.12.23
+
+compute bonuses for gain-loss behavior
+
+@author: cgrossman
+"""
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from compPsych.gain_loss.analyses.behavior.analyze_performance import analyze_performance
+from compPsych.core.env import DEMOGRAPHICS_DIR
+from compPsych.gain_loss.config import DATA_DIR
+import os
+
+
+def plot_bonuses(bonuses):
+    # Plot results
+    num_sessions = np.where(~np.isnan(bonuses))[1].max() + 1
+    plt.figure(figsize=(1, num_sessions))
+    colors = plt.cm.cool(np.linspace(0, 1, num_sessions))
+    for s_ind in range(num_sessions):
+        plt.subplot(1, num_sessions, s_ind + 1)
+        plt.hist(bonuses[:, s_ind], bins=10, color=colors[s_ind])
+        plt.title(f'Session {s_ind + 1} Bonuses')
+        plt.xlabel('Bonus Amount ($)')
+        plt.ylabel('Number of Participants')
+
+    plt.tight_layout()
+    plt.show(block=True)
+
+
+def save_bonuses(bonuses, min_bonus, subject_ids, session_name):
+    # Save bonuses to CSV
+    demo_path = os.path.join(DEMOGRAPHICS_DIR, session_name + '.csv')
+
+    if session_name is None or not os.path.exists(demo_path):
+        # throw error if no session_name provided
+        raise ValueError("Correct session_name must be provided to save bonuses.")
+    
+    # Load demographic data to extract session id
+    session_number = int(session_name[1])
+    sd = pd.read_csv(demo_path)
+    bonuses_df = sd[['Submission id']].copy()
+    bonuses_df['bonus'] = min_bonus
+
+    # Map computed bonuses to demographic data session list for the relevant session
+    for s_ind, subject in enumerate(subject_ids):
+        session_ind = sd[sd['Participant id'] == subject].index
+        if session_ind.empty:
+                continue
+        if not np.isnan(bonuses[s_ind, session_number - 1]):
+            bonuses_df.loc[session_ind, 'bonus'] = bonuses[s_ind, session_number - 1]
+        else:
+            bonuses_df.loc[session_ind, 'bonus'] = min_bonus
+    
+    # Save bonuses_df to csv
+    bonus_save_path = os.path.join(DATA_DIR, 'bonuses', f'{session_name}_gain_loss_bonuses.csv')
+    bonuses_df.to_csv(bonus_save_path, index=False)
+
+
+def determine_bonuses(subselect=None, plot_flag=False, session_name=None):
+    
+    # analyze behavior performance
+    _, bd = analyze_performance(subselect=subselect, plot_flag=False)
+    corr_prob = np.vstack(bd['corr_prob'].to_numpy())
+    win_prob = np.vstack(bd['win_prob'].to_numpy()) 
+
+    performance = corr_prob + win_prob
+    performance[np.isnan(corr_prob) & np.isnan(win_prob)] = np.nan
+
+    base_performance = 1.0      # baseline performance rate, <15th percentile
+    max_performance = 1.3       # maximum performance rate, >85th percentile
+    min_bonus = 0.15            # minimum bonus
+    max_bonus = 0.50            # maximum bonus
+    factor = (max_bonus - min_bonus) / (max_performance - base_performance)     # compute scaling factor
+    bonuses = (performance - base_performance) * factor + min_bonus             # compute bonuses
+    bonuses[bonuses < min_bonus] = min_bonus                                    # set minimum bonus
+    bonuses[bonuses > max_bonus] = max_bonus                                    # set maximum bonus
+    bonuses = bonuses.round(2)                                                  # round to nearest cent
+
+    save_bonuses(bonuses, min_bonus, bd['subject_id'], session_name=session_name)
+
+    if plot_flag:
+        plot_bonuses(bonuses)
+
+    return pd.DataFrame({
+        'subject_id': bd['subject_id'],
+        'bonuses': list(bonuses),
+    })
+
+
+if __name__ == "__main__":
+    session_name='s3_groupA'
+    determine_bonuses(session_name=session_name, plot_flag=True)
