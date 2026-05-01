@@ -42,67 +42,45 @@ def export_raw_data(cs_data, task_name, output_dir, completed_participants=None)
     """
     raw_data_dir = f'{output_dir}/raw_data'
     Path(raw_data_dir).mkdir(parents=True, exist_ok=True)
-    
-    # Get all participant document references
-    participant_refs = cs_data.list_documents()
-    total_sessions_found = 0
-    
-    for participant_ref in participant_refs:
+
+    for participant_ref in cs_data.list_documents():
         participant_id = participant_ref.id
-        
-        # Skip participants not in the completed_participants set if provided
         if completed_participants is not None and participant_id not in completed_participants:
             continue
-        
-        # Access spells collection
-        spells_collection = participant_ref.collection('spells')
-        session_refs = spells_collection.list_documents()
-        
-        participant_data = {
-            'participant_id': participant_id,
-            'sessions': {}
-        }
-        
-        sessions_found = False
-        
-        for session_ref in session_refs:
+
+        # Load existing export, if any
+        output_file = f'{raw_data_dir}/{participant_id}.json'
+        if os.path.exists(output_file):
+            with open(output_file) as f:
+                participant_data = json.load(f)
+            existing_sessions = set(participant_data.get('sessions', {}).keys())
+        else:
+            participant_data = {'participant_id': participant_id, 'sessions': {}}
+            existing_sessions = set()
+
+        updated = False
+        for session_ref in participant_ref.collection('spells').list_documents():
             session_id = session_ref.id
-            
-            # Access modules collection
-            modules_collection = session_ref.collection('modules')
-            task_refs = modules_collection.list_documents()
-            
-            for task_ref in task_refs:
-                current_task_name = task_ref.id
-                
-                # Check if this is the task we're looking for (or get all tasks)
-                if task_name is None or current_task_name == task_name:
-                    # Access task-data collection
-                    task_data_collection = task_ref.collection('task-data')
-                    task_data_docs = list(task_data_collection.stream())
-                    
-                    if task_data_docs:
-                        task_data_list = []
-                        for doc in task_data_docs:
-                            doc_data = doc.to_dict()
-                            doc_data['_doc_id'] = doc.id
-                            task_data_list.append(doc_data)
-                        
-                        # Store in nested structure
-                        if session_id not in participant_data['sessions']:
-                            participant_data['sessions'][session_id] = {}
-                        
-                        participant_data['sessions'][session_id] = task_data_list
-                        sessions_found = True
-        
-        # Save participant data if any sessions were found
-        if sessions_found:
-            output_file = f'{raw_data_dir}/{participant_id}.json'
+            if session_id in existing_sessions:
+                continue  # skip the expensive part: modules + task-data reads
+
+            task_ref = session_ref.collection('modules').document(task_name)
+            task_data_docs = list(task_ref.collection('task-data').stream())
+            if not task_data_docs:
+                continue
+
+            task_data_list = []
+            for doc in task_data_docs:
+                d = doc.to_dict()
+                d['_doc_id'] = doc.id
+                task_data_list.append(d)
+
+            participant_data['sessions'][session_id] = task_data_list
+            updated = True
+
+        if updated:
             with open(output_file, 'w') as f:
                 json.dump(participant_data, f, indent=2, default=json_serial)
-            total_sessions_found += 1
-    
-    print(f"Total participants with data: {total_sessions_found}")
 
 def load_json_to_dataframe(json_file_path):
     """Load a single participant JSON file into a pandas DataFrame."""
@@ -136,8 +114,8 @@ def add_fields_gain_loss(df):
 
         # Add field to inicate win/loss
         df['is_win'] = ((df['trialType'] == 'gain') & (df['amount'] == 25)) | ((df['trialType'] == 'loss') & (df['amount'] == 0))
+        df['is_win'] = df['is_win'].astype('boolean')
         df.loc[df['amount'].isna(), 'is_win'] = pd.NA
-
 
         # Add field to indicate correct/incorrect choice, reward probabilities, stimulus positions, and block changes
         design_numbers = df['designNo'][df['practice'].diff().fillna(0) == -1].to_numpy()
@@ -179,6 +157,7 @@ def add_fields_gain_loss(df):
             df['block_change'] = block_change
             df['prob_reversal'] = prob_reversal
             df['is_correct'] = df['chosenStimID'].to_numpy() == correct_choice
+            df['is_correct'] = df['is_correct'].astype('boolean')
             df.loc[df['amount'].isna(), 'is_correct'] = pd.NA
             df['choice'] = (df['chosenStimID'] == choice_A).astype(int)
 

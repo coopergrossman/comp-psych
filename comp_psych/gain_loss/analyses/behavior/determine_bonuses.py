@@ -92,5 +92,5 @@ def determine_bonuses(subselect=None, plot_flag=False, session_name=None):
 
 
 if __name__ == "__main__":
-    session_name='s3_groupA'
+    session_name='s3_groupB'
     determine_bonuses(session_name=session_name, plot_flag=True)
