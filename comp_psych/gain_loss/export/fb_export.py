@@ -168,18 +168,19 @@ def add_fields_gain_loss(df):
     return df
 
 
-def create_dataframe(raw_data_dir):
+def create_dataframe(raw_data_dir, completed_participants=None):
     """Load all participant JSON files into a single DataFrame."""
     all_dfs = []
     
     json_files = [f for f in listdir(raw_data_dir) if f.endswith('.json')]
     
     for json_file in json_files:
-        file_path = os.path.join(raw_data_dir, json_file)
-        df = load_json_to_dataframe(file_path)
-        df = add_fields_gain_loss(df)
-        if not df.empty:
-            all_dfs.append(df)
+        if completed_participants is None or json_file.split('.')[0] in completed_participants:
+            file_path = os.path.join(raw_data_dir, json_file)
+            df = load_json_to_dataframe(file_path)
+            df = add_fields_gain_loss(df)
+            if not df.empty:
+                all_dfs.append(df)
     
     if all_dfs:
         combined_df = pd.concat(all_dfs, ignore_index=True)
@@ -239,14 +240,14 @@ def fb_export_gain_loss(force_refresh=False):
         os.path.exists(raw_data_dir) and 
         len([f for f in os.listdir(raw_data_dir) if os.path.isfile(os.path.join(raw_data_dir, f))]) > 0
     )
+
+    # Find included subjects
+    completed_participants = load_all_completed_participants()
     
     if not has_existing_files or force_refresh:
         # Initialize Firebase
         client = initialize_firebase(credentials_file)
         cs_data = client.collection('participants')
-
-        # Find included subjects
-        completed_participants = load_all_completed_participants()
 
         # Export raw data
         print("Exporting raw data...")
@@ -254,10 +255,10 @@ def fb_export_gain_loss(force_refresh=False):
     
     # Parse subject data
     print("Creating dataframe...")
-    combined_df = create_dataframe(raw_data_dir)
+    combined_df = create_dataframe(raw_data_dir, completed_participants)
     combined_df.to_parquet(f'{output_dir}/all_data.parquet', index=False)
 
 
 if __name__ == "__main__":
-    force_refresh = True
+    force_refresh = False
     fb_export_gain_loss(force_refresh = force_refresh)
