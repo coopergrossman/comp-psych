@@ -2,6 +2,5 @@ comp_psych/core/fb_credentials.json
 **/fb_credentials.json
 *.credentials.json
 data/
-CLAUDE.md
 .claude/
 .vscode/
