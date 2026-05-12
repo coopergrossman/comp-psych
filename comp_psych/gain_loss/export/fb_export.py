@@ -260,5 +260,5 @@ def fb_export_gain_loss(force_refresh=False):
 
 
 if __name__ == "__main__":
-    force_refresh = False
+    force_refresh = True
     fb_export_gain_loss(force_refresh = force_refresh)

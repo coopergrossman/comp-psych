@@ -177,6 +177,35 @@ def to_serializable(x: Any) -> Any:
     return x
 
 
+def compute_manual_subscales(
+        per_item: List[Dict[str, Any]],
+        manual_map: Dict[str, str]
+        ) -> Dict[str, Dict[str, Any]]:
+    """Compute {code: {"n": int, "sum": float}} by mapping each item's id to a subscale code.
+
+    Used for questionnaires where Firestore does not pre-compute subscale totals
+    (e.g. SPQ): the caller supplies a manual id -> subscale-code map, and this
+    function returns the same shape Firestore would have produced under
+    payload.scores.subscales.
+    """
+    result: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"n": 0, "sum": 0.0})
+    for item in per_item:
+        if not isinstance(item, dict):
+            continue
+        code = manual_map.get(item.get("id"))
+        if code is None:
+            continue
+        value = item.get("value")
+        if value in (None, ""):
+            continue
+        try:
+            result[code]["sum"] += float(value)
+            result[code]["n"] += 1
+        except (TypeError, ValueError):
+            continue
+    return {k: dict(v) for k, v in result.items()}
+
+
 def transform_to_long_format(
         module_data: Dict[str, Any],
         questionnaire_config: Dict[str, Any]
@@ -227,7 +256,17 @@ def transform_to_long_format(
     per_item = payload.get("perItem", [])
     if not isinstance(per_item, list):
         per_item = []
-    
+
+    # Manual subscale mapping (e.g. SPQ): when configured, the questionnaire
+    # carries no per-item subscale field and Firestore did not pre-compute
+    # subscale totals. We map id -> code locally and synthesize the
+    # {code: {n, sum}} dict that the emission loop below normally reads from
+    # payload.scores.subscales.
+    manual_map = questionnaire_config.get("manual_subscale_map")
+    manual_codes = (
+        compute_manual_subscales(per_item, manual_map) if manual_map else None
+    )
+
     # Create one row per item in perItem array
     for item_data in per_item:
         if not isinstance(item_data, dict):
@@ -241,8 +280,12 @@ def transform_to_long_format(
         if prompt is None:
             prompt = ""
         
-        # type comes from 'sad' field
-        item_type = item_data.get(questionnaire_config["type_field"], "")
+        # type comes from the configured per-item field (e.g. 'sad' for DASS21),
+        # or from the manual id -> subscale-code map when set (e.g. SPQ).
+        if manual_map:
+            item_type = manual_map.get(item_id, "")
+        else:
+            item_type = item_data.get(questionnaire_config["type_field"], "")
         if item_type is None:
             item_type = ""
         
@@ -406,8 +449,10 @@ def transform_to_long_format(
     if not questionnaire_config.get("subscales"):
         return rows
     
-    # Add subscale rows (prompt, options empty, but type has A/D/S)
-    subscales = scores.get("subscales", {})
+    # Add subscale rows (prompt, options empty, but type has A/D/S).
+    # When manual_codes was computed above (manual_subscale_map in config),
+    # use it in place of the Firestore-supplied subscales dict.
+    subscales = manual_codes if manual_codes is not None else scores.get("subscales", {})
     if not isinstance(subscales, dict):
         subscales = {}
     
@@ -589,8 +634,42 @@ def get_questionnaire_config(questionnaire: str) -> Dict[str, Any]:
     elif questionnaire == "spq":
         return {
             "name": "spq",
-            "type_field": "sub",
-            "subscales": None
+            "type_field": "sub",  # unused when manual_subscale_map is set
+            "subscales": ["I", "C", "D"], 
+            "manual_subscale_map": {
+                "spqbr1": "I",
+                "spqbr2": "D",
+                "spqbr3": "C",
+                "spqbr4": "D",
+                "spqbr5": "D",
+                "spqbr6": "I",
+                "spqbr7": "C",
+                "spqbr8": "D",
+                "spqbr9": "I",
+                "spqbr10": "C",
+                "spqbr11": "I",
+                "spqbr12": "C",
+                "spqbr13": "C",
+                "spqbr14": "I",
+                "spqbr15": "D",
+                "spqbr16": "I",
+                "spqbr17": "I",
+                "spqbr18": "C",
+                "spqbr19": "I",
+                "spqbr20": "C",
+                "spqbr21": "C",
+                "spqbr22": "C",
+                "spqbr23": "D",
+                "spqbr24": "C",
+                "spqbr25": "C",
+                "spqbr26": "C",
+                "spqbr27": "C",
+                "spqbr28": "C",
+                "spqbr29": "I",
+                "spqbr30": "D",
+                "spqbr31": "D",
+                "spqbr32": "I",
+            },
         }
     elif questionnaire == "demography":
         return {

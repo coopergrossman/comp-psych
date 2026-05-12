@@ -212,5 +212,5 @@ def analyze_questionnaire_consistency(questionnaires, subselect=None, variance='
 
 if __name__ == "__main__":
     subselect = {'num_sessions': 3}
-    questionnaires = ['dass21', 'ocir', 'spq']
+    questionnaires = ['spq']
     analyze_questionnaire_consistency(questionnaires, subselect=subselect, variance='mssd')
