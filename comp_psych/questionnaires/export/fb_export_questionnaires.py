@@ -749,7 +749,7 @@ def load_completed_participants(session_doc_id: str) -> Set[str]:
     if not os.path.exists(csv_path):
         print(f"[Export] Warning: Subject inclusion list file not found: {csv_path}")
         print(f"[Export] Proceeding without filtering by completion status")
-        return set()
+        return None
     
     completed_participants: Set[str] = set()
     
