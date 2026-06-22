@@ -33,6 +33,10 @@ def subselect_data(df, subselect=None, defaults=True):
         valid_subjs = session_counts[session_counts == subselect['num_sessions']].index
         df = df[df['participant_id'].isin(valid_subjs)]
 
+    # Filter by group ID (last character of session_id, e.g. 's1_groupA' -> 'A')
+    if 'group_id' in subselect:
+        df = df[df['session_id'].str[-1].isin(subselect['group_id'])]
+
     # Filter by participant ID
     if 'participant_id' in subselect:
         df = df[df['participant_id'].isin(subselect['participant_id'])]

@@ -37,7 +37,7 @@ def save_stan_outputs(save_path, samples, summary, param_estimates, subj_param_e
 def fit_stan_model(
         subselect=None, 
         iter=2000, 
-        warmup=1000, 
+        warmup=None, 
         num_chains=4, 
         delta=0.9, 
         model_name='q', 
@@ -45,6 +45,9 @@ def fit_stan_model(
         force_rerun=False
 ):
     
+    if warmup is None:
+        warmup = iter // 2
+
     # Load all data
     data = load_gain_loss_data(subselect=subselect, subselect_defaults=True)
     subjects = data['participant_id'].unique()
@@ -124,11 +127,10 @@ def fit_stan_model(
 
 
 if __name__ == "__main__":
-    subselect = {'participant_id': ['5a09ebdf087f2e0001eae39f']}
+    subselect = {'group_id': ['A']}
     fit_stan_model(
         subselect=subselect, 
-        iter=100, 
-        warmup=100, 
+        iter=400, 
         model_name='q_a_win_lose_loss_gain_forget', 
         force_rerun=True
     )
