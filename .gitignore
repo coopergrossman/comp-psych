@@ -3,4 +3,5 @@ comp_psych/core/fb_credentials.json
 *.credentials.json
 data/
 .claude/
+.vscode/
 comp_psych.egg-info/
