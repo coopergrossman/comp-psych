@@ -5,3 +5,6 @@ data/
 .claude/
 .vscode/
 comp_psych.egg-info/
+__pycache__/
+*.pyc
+*.exe

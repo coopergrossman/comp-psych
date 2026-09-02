@@ -96,6 +96,21 @@ def _estimate_mssd(scores_df, subscales_df, questions_df):
     
 
 def plot_variance_distributions(scores_var, subscales_var, questions_var, questionnaire, variance):
+    """Plot histograms of a per-participant, cross-session variance measure.
+
+    Produces two figures: one for score/subscale columns, one for
+    individual question columns.
+
+    Parameters
+    ----------
+    scores_var, subscales_var, questions_var : pandas.DataFrame
+        Per-participant variance measure (see `variance`), one column per
+        score/subscale/question, as computed by `_estimate_std`/`_estimate_cv`/`_estimate_mssd`.
+    questionnaire : str
+        Questionnaire name, used in figure titles.
+    variance : str
+        Name of the variance measure used (for axis/title labeling only).
+    """
     # ---------- Figure 1: Scores + Subscales ----------
     score_cols = list(scores_var.columns)
     subscale_cols = list(subscales_var.columns) if subscales_var is not None and len(subscales_var.columns) > 0 else []
@@ -188,10 +203,22 @@ def plot_variance_distributions(scores_var, subscales_var, questions_var, questi
 
 
 def analyze_questionnaire_consistency(questionnaires, subselect=None, variance='cv'):
-    """
-    Analyze consistency of questionnaire responses across sessions by:
-    - calculating variance of scores, subscales, and questions for each participant across sessions
-    - plotting distributions of these variances for each questionnaire
+    """Plot within-participant, cross-session response-consistency distributions.
+
+    For each questionnaire, computes a per-participant variance measure
+    (across that participant's sessions) for scores, subscales, and
+    individual questions, then plots the distribution of that measure
+    across participants.
+
+    Parameters
+    ----------
+    questionnaires : list of str
+        Questionnaire IDs to analyze (e.g. ['spq']).
+    subselect : dict, optional
+        Filter criteria passed through to `load_scores`/`load_subscales`/`load_questions`.
+    variance : {'std', 'cv', 'mssd'}, default 'cv'
+        Variance measure: standard deviation, coefficient of variation
+        (sd / mean), or mean squared successive difference.
     """
 
     for questionnaire in questionnaires:

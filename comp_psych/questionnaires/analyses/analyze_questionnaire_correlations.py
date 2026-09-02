@@ -65,6 +65,16 @@ def _plot_corr_matrix(ax, df, title):
 
 
 def plot_correlations(scores_df, subscales_df, questions_df):
+    """Plot correlation heatmaps across questionnaires, at increasing levels of granularity.
+
+    Parameters
+    ----------
+    scores_df, subscales_df, questions_df : list of pandas.DataFrame
+        Per-questionnaire, questionnaire-prefixed DataFrames (as built by
+        `_prepare_df` in `analyze_questionnaire_correlations`), outer-joined
+        by their (participant, session) index into three heatmaps: scores
+        alone, scores + subscales, and scores + subscales + questions.
+    """
 
     scores_combined = pd.concat(scores_df, axis=1, join="outer")
     scores_subscales_combined = pd.concat(scores_df + subscales_df, axis=1, join="outer")
@@ -84,6 +94,16 @@ def plot_correlations(scores_df, subscales_df, questions_df):
 
 
 def analyze_questionnaire_correlations(questionnaires, subselect=None):
+    """Plot cross-questionnaire correlation heatmaps for scores, subscales, and items.
+
+    Parameters
+    ----------
+    questionnaires : list of str
+        Questionnaire IDs to load and correlate together (e.g.
+        ['dass21', 'ocir', 'spq']).
+    subselect : dict, optional
+        Filter criteria passed through to `load_scores`/`load_subscales`/`load_questions`.
+    """
 
     scores_list = []
     subscales_list = []

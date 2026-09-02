@@ -16,19 +16,47 @@ import os.path
 from os import listdir
 import csv
 from pathlib import Path
+from typing import Set
 from comp_psych.gain_loss.config import DATA_DIR, DESIGNS_DIR
 from comp_psych.core.env import FB_CREDENTIALS_FILE, DEMOGRAPHICS_DIR
 
 
 def json_serial(obj):
-    """JSON serializer for objects not serializable by default json code"""
+    """JSON serializer for objects not serializable by default json code.
+
+    Parameters
+    ----------
+    obj : Any
+        Object encountered by `json.dump`'s `default` hook.
+
+    Returns
+    -------
+    str
+        ISO-format string, for `datetime.date`/`datetime.datetime` objects.
+
+    Raises
+    ------
+    TypeError
+        For any other non-serializable type.
+    """
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
 def initialize_firebase(credentials_file):
-    """Initialize Firebase app if not already initialized."""
+    """Initialize the Firebase app (if not already initialized) and return a client.
+
+    Parameters
+    ----------
+    credentials_file : str or pathlib.Path
+        Path to a Firebase service-account JSON key file.
+
+    Returns
+    -------
+    google.cloud.firestore.Client
+        Firestore client for the initialized app.
+    """
     if not firebase_admin._apps:
         cred = credentials.Certificate(credentials_file)
         firebase_admin.initialize_app(cred)
@@ -36,9 +64,23 @@ def initialize_firebase(credentials_file):
 
 
 def export_raw_data(cs_data, task_name, output_dir, completed_participants=None):
-    """Export raw subject data from Firebase to JSON files.
-    
-    Structure: participants/<participant_name>/spells/<session_name>/modules/<task_name>/task-data
+    """Export raw subject task data from Firestore to per-participant JSON files.
+
+    Structure read: participants/<participant_id>/spells/<session_id>/modules/<task_name>/task-data.
+    Incremental: skips sessions already present in an existing output file, so
+    re-running only fetches newly-added sessions.
+
+    Parameters
+    ----------
+    cs_data : google.cloud.firestore.CollectionReference
+        Reference to the `participants` collection.
+    task_name : str
+        Module document ID under each session's `modules` subcollection
+        (e.g. 'gain_loss').
+    output_dir : str or pathlib.Path
+        Directory under which `raw_data/<participant_id>.json` files are written.
+    completed_participants : set of str, optional
+        If given, only participants whose ID is in this set are exported.
     """
     raw_data_dir = f'{output_dir}/raw_data'
     Path(raw_data_dir).mkdir(parents=True, exist_ok=True)
@@ -83,7 +125,20 @@ def export_raw_data(cs_data, task_name, output_dir, completed_participants=None)
                 json.dump(participant_data, f, indent=2, default=json_serial)
 
 def load_json_to_dataframe(json_file_path):
-    """Load a single participant JSON file into a pandas DataFrame."""
+    """Load a single participant's raw-export JSON into a flat DataFrame.
+
+    Parameters
+    ----------
+    json_file_path : str or pathlib.Path
+        Path to a `raw_data/<participant_id>.json` file written by
+        `export_raw_data`.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per trial document, with `participant_id` and `session_id`
+        columns prepended to that document's own fields.
+    """
     with open(json_file_path, 'r') as f:
         data = json.load(f)
     
@@ -104,7 +159,26 @@ def load_json_to_dataframe(json_file_path):
     return pd.DataFrame(all_rows)
 
 def add_fields_gain_loss(df):
-    """Add fields from the design file for the gain-loss task."""
+    """Derive gain_loss task-design fields by joining trial data to design CSVs.
+
+    Adds `is_win`, `pWin_1`, `pWin_2`, `stimIndex_1`, `stimIndex_2`,
+    `block_change`, `prob_reversal`, `is_correct`, and `choice`, looked up
+    per trial from the design files under `gain_loss.config.DESIGNS_DIR`
+    matching each session's `designNo`.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Raw trial data for one participant, as returned by
+        `load_json_to_dataframe`.
+
+    Returns
+    -------
+    pandas.DataFrame
+        `df` with the derived columns added, or an empty DataFrame if `df`
+        has no `designNo` column or its trial count doesn't match the
+        concatenated design files (a signal of corrupted/incomplete data).
+    """
 
     # Only assess subjects with any sessions with design number
     if 'designNo' in df.columns:
@@ -169,7 +243,22 @@ def add_fields_gain_loss(df):
 
 
 def create_dataframe(raw_data_dir, completed_participants=None):
-    """Load all participant JSON files into a single DataFrame."""
+    """Load and concatenate all participants' raw JSON exports into one DataFrame.
+
+    Parameters
+    ----------
+    raw_data_dir : str or pathlib.Path
+        Directory of `<participant_id>.json` files (as written by `export_raw_data`).
+    completed_participants : set of str, optional
+        If given, only participants whose ID (JSON filename stem) is in this
+        set are included.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Combined trial-level data across participants, with design fields
+        added via `add_fields_gain_loss`. Empty if no participant yielded data.
+    """
     all_dfs = []
     
     json_files = [f for f in listdir(raw_data_dir) if f.endswith('.json')]
@@ -192,17 +281,20 @@ def create_dataframe(raw_data_dir, completed_participants=None):
 
 
 def load_all_completed_participants():
+    """Load approved participant IDs from every inclusion list in DEMOGRAPHICS_DIR.
+
+    Unlike the questionnaire export's `load_completed_participants` (which
+    reads a single group's list), this reads every file matching
+    `inclusion_list*.csv` in `DEMOGRAPHICS_DIR`, since this export isn't
+    scoped to one spell/group.
+
+    Returns
+    -------
+    set of str
+        Approved participant IDs, unioned across all inclusion list files.
+        Empty if no inclusion list files are found (no filtering applied).
     """
-    Load prolificIds of participants who have been approved
-    from all inclusion_list CSV files.
-    
-    Returns a set of prolificIds who have been approved.
-    
-    Subject List File Location:
-    Master subject inclusion list is expected at:
-        DEMOGRAPHICS_DIR/inclusion_list_{group_id}.csv
-    """
-    
+
     # Load master subject inclusion lists (any file that includes 'inclusion_list')
     csv_filenames = [f for f in os.listdir(DEMOGRAPHICS_DIR) if 'inclusion_list' in f and f.endswith('.csv')]
     
@@ -229,7 +321,15 @@ def load_all_completed_participants():
 
 
 def fb_export_gain_loss(force_refresh=False):
-    """Main function to process all Firebase data."""
+    """Export gain_loss data from Firestore (if needed) and rebuild all_data.parquet.
+
+    Parameters
+    ----------
+    force_refresh : bool, default False
+        If True, re-download raw data from Firestore even if local raw JSON
+        files already exist. If False and raw files already exist, skips
+        the Firestore fetch and only re-parses the existing JSON.
+    """
     task_name = 'gain_loss'
     output_dir = DATA_DIR
     credentials_file = FB_CREDENTIALS_FILE

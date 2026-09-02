@@ -37,42 +37,42 @@ Subject inclusion list:
 
 Basic usage:
     # Export DASS-21 questionnaire data (aggregated output only)
-    python -m questionnaires.export.fb_export_questionnaire \
+    python -m comp_psych.questionnaires.export.fb_export_questionnaires \
         --spell s1_groupA \
         --questionnaire dass21
 
 Examples:
     # Specify output directory
-    python -m questionnaires.export.fb_export_questionnaire \
+    python -m comp_psych.questionnaires.export.fb_export_questionnaires \
         --spell s1_groupA \
         --questionnaire dass21 \
         --out q_dass21/
 
     # Export for a specific participant
-    python -m questionnaires.export.fb_export_questionnaire \
+    python -m comp_psych.questionnaires.export.fb_export_questionnaires \
         --spell s1_groupA \
         --questionnaire dass21 \
         --prolific-id PARTICIPANT_ID
 
     # Bypass subject inclusion filtering
-    python -m questionnaires.export.fb_export_questionnaire \
+    python -m comp_psych.questionnaires.export.fb_export_questionnaires \
         --spell s1_groupA \
         --questionnaire dass21 \
         --all
 
     # Output modes
-    python -m questionnaires.export.fb_export_questionnaire \
+    python -m comp_psych.questionnaires.export.fb_export_questionnaires \
         --spell s1_groupA \
         --questionnaire dass21 \
         --output-mode individual
 
-    python -m questionnaires.export.fb_export_questionnaire \
+    python -m comp_psych.questionnaires.export.fb_export_questionnaires \
         --spell s1_groupA \
         --questionnaire dass21 \
         --output-mode both
 
     # Specify Firebase credentials
-    python -m questionnaires.export.fb_export_questionnaire \
+    python -m comp_psych.questionnaires.export.fb_export_questionnaires \
         --spell s1_groupA \
         --questionnaire dass21 \
         --credentials path/to/credentials.json
@@ -155,7 +155,22 @@ with suppress_stderr():
 
 
 def to_serializable(x: Any) -> Any:
-    """Convert Firestore types to JSON-serializable types."""
+    """Recursively convert Firestore-specific types to JSON-serializable types.
+
+    Parameters
+    ----------
+    x : Any
+        Value (possibly a dict/list containing) from a Firestore document:
+        `datetime`, `DocumentReference`, `GeoPoint`, `bytes`, or a plain
+        JSON-compatible type.
+
+    Returns
+    -------
+    Any
+        `x` with `datetime` -> ISO string, `DocumentReference` -> its path
+        string, `GeoPoint` -> a `{"_geopoint": {...}}` dict, `bytes` ->
+        decoded string, and dicts/lists converted recursively.
+    """
     if isinstance(x, datetime):
         if x.tzinfo is None:
             x = x.replace(tzinfo=timezone.utc)
@@ -521,7 +536,16 @@ def transform_to_long_format(
 
 
 def write_csv(path: str, rows: List[Dict[str, Any]]):
-    """Write rows to CSV with specified columns only."""
+    """Write long-format questionnaire rows to a CSV with a fixed column order.
+
+    Parameters
+    ----------
+    path : str
+        Output CSV file path.
+    rows : list of dict
+        Rows as built by `transform_to_long_format`; missing keys are
+        written as empty strings. If empty, only the header row is written.
+    """
     # Define the exact column order
     header = [
         "sessionId", "groupId", "prolificId",
@@ -552,17 +576,24 @@ def aggregate_csv_files(
         prolific_ids: List[str],
         questionnaire: str
 ) -> str:
-    """
-    Aggregate all individual participant CSV files into one combined CSV file.
-    
-    Args:
-        out_dir: Output directory containing the CSV files
-        normalized_spell: Normalized spell name (e.g., 's1_groupA')
-        prolific_ids: List of prolific IDs to aggregate
-        questionnaire: Name of the questionnaire
-    
-    Returns:
-        Path to the aggregated CSV file
+    """Aggregate individual participant CSV files into one combined CSV.
+
+    Parameters
+    ----------
+    out_dir : str
+        Output directory containing the individual CSV files.
+    normalized_spell : str
+        Normalized spell name (e.g. 's1_groupA'), used in the output filename.
+    prolific_ids : list of str
+        Prolific IDs to aggregate; individual files not found are skipped
+        with a warning.
+    questionnaire : str
+        Questionnaire name, used in both individual and output filenames.
+
+    Returns
+    -------
+    str
+        Path to the written aggregated CSV file.
     """
     # Define the exact column order
     header = [
@@ -619,6 +650,31 @@ def normalize_spell(spell: str) -> str:
     return f"s{spell}"
 
 def get_questionnaire_config(questionnaire: str) -> Dict[str, Any]:
+    """Return the per-item field name, subscale codes, and manual mapping for a questionnaire.
+
+    Supported questionnaires (and their default loop membership in `main`)
+    are hard-coded here; adding a new one means updating both this function
+    and the default list in `main`.
+
+    Parameters
+    ----------
+    questionnaire : str
+        One of 'dass21', 'ocir', 'spq', 'demography'.
+
+    Returns
+    -------
+    dict
+        Keys: `name`, `type_field` (per-item field holding the subscale
+        code, when not using a manual map), `subscales` (list of subscale
+        codes, or None), and optionally `manual_subscale_map` (item id ->
+        subscale code, for questionnaires like SPQ where Firestore doesn't
+        pre-compute subscale totals).
+
+    Raises
+    ------
+    ValueError
+        If `questionnaire` is not one of the supported values.
+    """
     if questionnaire == "dass21":
         return {
             "name": "dass21",
@@ -773,12 +829,34 @@ def export_questionnaire_modules(
         prolific_id_filter: Optional[str] = None,
         allowed_prolific_ids: Optional[Set[str]] = None
 ) -> Dict[str, Dict[str, Any]]:
-    """
-    Export questionnaire module documents from Firestore, one per participant.
-    Path: participants/{prolificId}/spells/{sessionDocId}/modules/{moduleNumber}_questionnaire
-    
-    Uses modules collection group to discover module documents.
-    Returns a dictionary mapping prolificId -> module document (one per participant).
+    """Fetch one questionnaire module document per participant from Firestore.
+
+    Uses a `modules` collection-group query (path pattern
+    participants/{prolificId}/spells/{sessionDocId}/modules/{moduleNumber}_{questionnaire})
+    to discover module documents across all participants in one query,
+    rather than iterating participants individually.
+
+    Parameters
+    ----------
+    db : google.cloud.firestore.Client
+        Firestore client.
+    session_doc_id : str
+        Session document ID (spell) to filter to (e.g. 's1_groupA').
+    questionnaire : str
+        Questionnaire ID; matched as a `_{questionnaire}` suffix on the
+        module document ID.
+    prolific_id_filter : str, optional
+        If given, restrict to this one participant.
+    allowed_prolific_ids : set of str, optional
+        If given (and `prolific_id_filter` is None), restrict to
+        participants in this set.
+
+    Returns
+    -------
+    dict
+        Maps `prolificId` -> a record combining path info (`sessionDocId`,
+        `sessionId`, `groupId`, `prolificId`, `moduleDocId`) with the raw
+        module document fields.
     """
     questionnaire_by_subject: Dict[str, Dict[str, Any]] = {}
     seen_paths = set()  # Track unique module paths to avoid duplicates
@@ -849,6 +927,14 @@ def export_questionnaire_modules(
     return questionnaire_by_subject
 
 def main():
+    """CLI entry point: export one or all questionnaires for a spell.
+
+    Parses arguments (see module docstring), authenticates to Firestore,
+    and for each questionnaire (either `--questionnaire` or all four
+    supported ones) fetches module documents, filters by the subject
+    inclusion list (unless `--all`), transforms to long format, and writes
+    individual and/or aggregated CSVs per `--output-mode`.
+    """
     ap = argparse.ArgumentParser(
         description="Download dass21 module documents from Firestore for comp-psych-longitudinal-2025 project"
     )

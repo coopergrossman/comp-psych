@@ -13,6 +13,26 @@ from comp_psych.gain_loss.load import load_gain_loss_data
 
 
 def analyze_performance(subselect=None, plot_flag=True):
+    """Compute per-subject, per-session win and correct-choice probabilities.
+
+    Parameters
+    ----------
+    subselect : dict, optional
+        Filter criteria passed to `comp_psych.core.selection.subselect_data`
+        via `load_gain_loss_data`.
+    plot_flag : bool, default True
+        If True, show session-averaged probability and histogram plots via
+        `plot_performance`.
+
+    Returns
+    -------
+    data : pandas.DataFrame
+        The loaded, subselected trial-level data.
+    summary : pandas.DataFrame
+        One row per subject, with `subject_id` and win/correct-choice
+        probability arrays (one value per session, overall and split by
+        gain/loss block).
+    """
     # Load data subselect data, remove dropped and practice trials by default
     data = load_gain_loss_data(subselect=subselect, subselect_defaults=True)
 
@@ -60,6 +80,15 @@ def analyze_performance(subselect=None, plot_flag=True):
 
 
 def plot_performance(win_prob, win_prob_gain, win_prob_loss, corr_prob, corr_prob_gain, corr_prob_loss, num_sessions):
+    """Plot session-averaged win/correct-choice probabilities and their per-session distributions.
+
+    Parameters
+    ----------
+    win_prob, win_prob_gain, win_prob_loss, corr_prob, corr_prob_gain, corr_prob_loss : numpy.ndarray
+        Per-subject, per-session arrays as computed by `analyze_performance`.
+    num_sessions : int
+        Number of sessions (columns of the arrays above).
+    """
     # Plot results
     sessions = np.arange(1, num_sessions + 1)
     plt.figure(figsize=(6, 8))

@@ -12,7 +12,26 @@ import matplotlib.pyplot as plt
 from comp_psych.gain_loss.analyses.behavior.analyze_performance import analyze_performance
 
 def analyze_performance_change(subselect=None, plot_flag=True):
-    
+    """Compute each subject's last-minus-first-session change in performance measures.
+
+    Parameters
+    ----------
+    subselect : dict, optional
+        Filter criteria passed through to `analyze_performance`.
+    plot_flag : bool, default True
+        If True, show histograms of each change measure with one-sample
+        t-tests against zero, via `plot_performance_change`.
+
+    Returns
+    -------
+    data : pandas.DataFrame
+        The loaded, subselected trial-level data (from `analyze_performance`).
+    summary : pandas.DataFrame
+        `analyze_performance`'s per-subject summary, with `*_diff` columns
+        added (last session value minus first session value) for each of
+        win_prob, corr_prob, and their gain/loss splits.
+    """
+
     # Load data
     data, bp = analyze_performance(subselect=subselect, plot_flag=False)
 
@@ -30,6 +49,14 @@ def analyze_performance_change(subselect=None, plot_flag=True):
     return data, bp
 
 def plot_performance_change(bp):
+    """Plot histograms of each performance-change measure with one-sample t-test p-values.
+
+    Parameters
+    ----------
+    bp : pandas.DataFrame
+        Per-subject summary with `*_diff` columns, as returned by
+        `analyze_performance_change`.
+    """
     from scipy.stats import ttest_1samp
     
     # Configuration for each subplot: (column, color, xlabel, title)

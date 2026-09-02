@@ -17,25 +17,65 @@ import matplotlib.pyplot as plt
 
 
 def compare_wsls_to_questionnaires(subselect=None, questionnaire='dass21', plot_flag=True):
+    """Regress win-stay/lose-shift behavior against questionnaire subscales.
+
+    Computes per-session WSLS measures via `analyze_wsls` and per-session
+    subscale scores for `questionnaire`, aligns them by (participant,
+    session), and fits one OLS model per WSLS measure (`measure ~ A + S + D`).
+
+    Parameters
+    ----------
+    subselect : dict
+        Must include `num_sessions`, the minimum number of completed
+        questionnaires required to keep a participant; also passed through
+        to `analyze_wsls`.
+    questionnaire : str, default 'dass21'
+        Questionnaire to load subscales for.
+    plot_flag : bool, default True
+        If True, show scatter/regression-coefficient plots via
+        `plot_compare_wsls_to_questionnaires`.
+    """
 
     # Load wsls and questionnaire wsls
     _, wsls = analyze_wsls(subselect=subselect, plot_flag=False)
     qd = load_subscales(questionnaire)
     qd = aggregate_sessions(qd)
 
-    wsls = pd.merge(wsls, qd, on='participant_id')
-
     # Find and remove subjects with only 2 completed questionnaires
-    wsls['num_questionnaires'] = wsls['A'].apply(len)
-    wsls = wsls[wsls['num_questionnaires'] >= subselect['num_sessions']].reset_index(drop=True)
+    qd['num_questionnaires'] = qd['A'].apply(len)
+    qd = qd[qd['num_questionnaires'] >= subselect['num_sessions']].reset_index(drop=True)
 
-    array_cols = ['A', 'S', 'D', 'win_stay', 'lose_shift', 'win_stay_gain', 'lose_shift_gain', 'win_stay_loss', 'lose_shift_loss']  # columns that contain arrays
+    behavior_cols = ['win_stay', 'lose_shift', 'win_stay_gain', 'lose_shift_gain', 'win_stay_loss', 'lose_shift_loss']
+    questionnaire_cols = ['A', 'S', 'D']
+
+    # Explode behavior and questionnaire scores separately, each against its
+    # own per-row session index, then join on (participant_id, session). A
+    # participant's number of completed questionnaires can differ from their
+    # number of completed task sessions, so a single positional explode
+    # across both arrays breaks whenever those lengths don't match.
     wsls = (
         wsls
-        .assign(session=lambda x: x[array_cols[0]].apply(lambda v: range(1, len(v) + 1)))
-        .explode(array_cols + ['session'], ignore_index=True)
+        .assign(session=lambda x: x[behavior_cols[0]].apply(lambda v: range(1, len(v) + 1)))
+        .explode(behavior_cols + ['session'], ignore_index=True)
     )
-    wsls[array_cols] = wsls[array_cols].apply(pd.to_numeric, errors='raise')
+    wsls['session'] = wsls['session'].astype(int)
+    wsls[behavior_cols] = wsls[behavior_cols].apply(pd.to_numeric, errors='raise')
+
+    qd = (
+        qd
+        .assign(session=lambda x: x[questionnaire_cols[0]].apply(lambda v: range(1, len(v) + 1)))
+        .explode(questionnaire_cols + ['session'], ignore_index=True)
+    )
+    qd['session'] = qd['session'].astype(int)
+    qd[questionnaire_cols] = qd[questionnaire_cols].apply(pd.to_numeric, errors='raise')
+
+    wsls = pd.merge(
+        wsls,
+        qd[['participant_id', 'session'] + questionnaire_cols],
+        on=['participant_id', 'session']
+    )
+
+    array_cols = questionnaire_cols + behavior_cols  # columns that contain arrays
 
     # Run regression analyses
     mdl_win_stay = smf.ols('win_stay ~ A + S + D', data=wsls).fit()
@@ -59,6 +99,18 @@ def compare_wsls_to_questionnaires(subselect=None, questionnaire='dass21', plot_
 
 
 def plot_compare_wsls_to_questionnaires(wsls, array_cols, mdl_win_stay, mdl_lose_shift, mdl_win_stay_gain, mdl_lose_shift_gain, mdl_win_stay_loss, mdl_lose_shift_loss):
+    """Plot WSLS-vs-subscale scatter fits and regression coefficients.
+
+    Parameters
+    ----------
+    wsls : pandas.DataFrame
+        Merged per-(participant, session) WSLS measures and subscale
+        scores, as built in `compare_wsls_to_questionnaires`.
+    array_cols : list of str
+        Questionnaire subscale columns (first 3) followed by WSLS measure columns.
+    mdl_win_stay, mdl_lose_shift, mdl_win_stay_gain, mdl_lose_shift_gain, mdl_win_stay_loss, mdl_lose_shift_loss : statsmodels regression result
+        Fitted OLS models, one per WSLS measure.
+    """
 
     behavior_vars = array_cols[3:]
     questionnaire_vars = array_cols[:3]

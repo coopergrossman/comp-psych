@@ -14,12 +14,19 @@ from comp_psych.questionnaires.load import load_scores, load_subscales, load_que
 
 
 def plot_response_distributions(df, df_name, questionnaire):
-    """
-    Plot histograms for each numeric column in a dataframe with:
-    - best-fit normal curve
-    - mean and median vertical lines
-    - KS test for normality
-    - skewness
+    """Plot a histogram (with fitted-normal overlay and normality stats) per numeric column.
+
+    Each subplot shows a histogram, a best-fit normal curve, mean/median
+    lines, and annotated KS-test-for-normality p-value and skewness.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Data to plot; only numeric columns are used.
+    df_name : str
+        Label for this DataFrame (e.g. 'Scores'), used in the figure title.
+    questionnaire : str
+        Questionnaire name, used in the figure title.
     """
 
     # Keep only numeric columns
@@ -107,6 +114,15 @@ def plot_response_distributions(df, df_name, questionnaire):
     plt.show(block=True)
 
 def analyze_questionnaire_distributions(questionnaire, subselect=None):
+    """Plot response distributions for a questionnaire's scores, subscales, and items.
+
+    Parameters
+    ----------
+    questionnaire : str
+        Questionnaire ID (e.g. 'ocir').
+    subselect : dict, optional
+        Filter criteria passed through to `load_scores`/`load_subscales`/`load_questions`.
+    """
 
     # Load questionnaire data
     qd_scores = load_scores(questionnaire, subselect=subselect)

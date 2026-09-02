@@ -12,7 +12,26 @@ import matplotlib.pyplot as plt
 from comp_psych.gain_loss.analyses.behavior.analyze_wsls import analyze_wsls
 
 def analyze_wsls_change(subselect=None, plot_flag=True):
-    
+    """Compute each subject's last-minus-first-session change in WSLS measures.
+
+    Parameters
+    ----------
+    subselect : dict, optional
+        Filter criteria passed through to `analyze_wsls`.
+    plot_flag : bool, default True
+        If True, show histograms of each change measure with one-sample
+        t-tests against zero, via `plot_wsls_change`.
+
+    Returns
+    -------
+    data : pandas.DataFrame
+        The loaded, subselected trial-level data (from `analyze_wsls`).
+    summary : pandas.DataFrame
+        `analyze_wsls`'s per-subject summary, with `*_diff` columns added
+        (last session value minus first session value) for each of
+        win_stay, lose_shift, and their gain/loss splits.
+    """
+
     # Load data
     data, wsls = analyze_wsls(subselect=subselect, plot_flag=False)
 
@@ -31,6 +50,14 @@ def analyze_wsls_change(subselect=None, plot_flag=True):
     return data, wsls
 
 def plot_wsls_change(wsls):
+    """Plot histograms of each WSLS-change measure with one-sample t-test p-values.
+
+    Parameters
+    ----------
+    wsls : pandas.DataFrame
+        Per-subject summary with `*_diff` columns, as returned by
+        `analyze_wsls_change`.
+    """
     from scipy.stats import ttest_1samp
     
     # Configuration for each subplot: (column, color, xlabel, title)

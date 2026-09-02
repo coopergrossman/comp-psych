@@ -8,20 +8,40 @@ compare gain_loss win-stay lose-shift behavior to questionnaire parameters
 
 import pandas as pd
 import numpy as np
-from compPsych.questionnaires.load import load_subscales
-from compPsych.core.modeling import load_model_parameters
-from compPsych.gain_loss.config import MODEL_SAVE_DIR
-from compPsych.gain_loss.modeling import get_param_names
+from comp_psych.questionnaires.load import load_subscales, aggregate_sessions
+from comp_psych.core.modeling import load_model_parameters
+from comp_psych.gain_loss.config import MODEL_SAVE_DIR
+from comp_psych.gain_loss.modeling import get_param_names
 import os
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
 
 def compare_parameters_to_questionnaires(
-        subselect=None, model_name = 'q', 
-        questionnaire='dass21', 
+        subselect=None, model_name = 'q',
+        questionnaire='dass21',
         plot_flag=True
 ):
+    """Regress fitted Stan model parameters against questionnaire subscales.
+
+    Loads per-session MAP parameter estimates for `model_name` and
+    per-session subscale scores for `questionnaire`, aligns them by
+    (participant, session), and fits one OLS model per parameter
+    (`param ~ A * S * D`).
+
+    Parameters
+    ----------
+    subselect : dict
+        Must include `num_sessions`, the minimum number of completed
+        questionnaires required to keep a participant.
+    model_name : str, default 'q'
+        Fitted Stan model to load (see `comp_psych.gain_loss.modeling.get_param_names`).
+    questionnaire : str, default 'dass21'
+        Questionnaire to load subscales for.
+    plot_flag : bool, default True
+        If True, show scatter/regression-coefficient plots via
+        `plot_compare_parameters_to_questionnaires`.
+    """
 
     # Load parameters and questionnaire data
     param_names = get_param_names(model_name)
@@ -31,33 +51,42 @@ def compare_parameters_to_questionnaires(
         param_names=param_names
     )
     qd = load_subscales(questionnaire)
-    
-    # Aggregate questionnaire parameters for each subject if multiple sessions
-    qd = (
-        qd
-        .drop(columns='session')
-        .groupby('participant_id', as_index=False)
-        .agg({
-            'A': list,
-            'S': list,
-            'D': list,
-            'group': 'first'
-        })
-    )
-
-    parameters = pd.merge(parameters, qd, on='participant_id')
+    qd = aggregate_sessions(qd)
 
     # Find and remove subjects with only 2 completed questionnaires
-    parameters['num_questionnaires'] = parameters['A'].apply(len)
-    parameters = parameters[parameters['num_questionnaires'] >= subselect['num_sessions']].reset_index(drop=True)
+    qd['num_questionnaires'] = qd['A'].apply(len)
+    qd = qd[qd['num_questionnaires'] >= subselect['num_sessions']].reset_index(drop=True)
 
-    array_cols = ['A', 'S', 'D'] + param_names  # columns that contain arrays
+    questionnaire_cols = ['A', 'S', 'D']
+
+    # Explode parameters and questionnaire scores separately, each against its
+    # own per-row session index, then join on (participant_id, session). A
+    # participant's number of completed questionnaires can differ from the
+    # number of sessions the model was fit on, so a single positional explode
+    # across both arrays breaks whenever those lengths don't match.
     parameters = (
         parameters
-        .assign(session=lambda x: x[array_cols[0]].apply(lambda v: range(1, len(v) + 1)))
-        .explode(array_cols + ['session'], ignore_index=True)
+        .assign(session=lambda x: x[param_names[0]].apply(lambda v: range(1, len(v) + 1)))
+        .explode(param_names + ['session'], ignore_index=True)
     )
-    parameters[array_cols] = parameters[array_cols].apply(pd.to_numeric, errors='raise')
+    parameters['session'] = parameters['session'].astype(int)
+    parameters[param_names] = parameters[param_names].apply(pd.to_numeric, errors='raise')
+
+    qd = (
+        qd
+        .assign(session=lambda x: x[questionnaire_cols[0]].apply(lambda v: range(1, len(v) + 1)))
+        .explode(questionnaire_cols + ['session'], ignore_index=True)
+    )
+    qd['session'] = qd['session'].astype(int)
+    qd[questionnaire_cols] = qd[questionnaire_cols].apply(pd.to_numeric, errors='raise')
+
+    parameters = pd.merge(
+        parameters,
+        qd[['participant_id', 'session'] + questionnaire_cols],
+        on=['participant_id', 'session']
+    )
+
+    array_cols = questionnaire_cols + param_names  # columns that contain arrays
 
     # Run regression analyses
     mdls = {}
@@ -70,6 +99,21 @@ def compare_parameters_to_questionnaires(
 
 
 def plot_compare_parameters_to_questionnaires(parameters, array_cols, mdls, param_names):
+    """Plot parameter-vs-subscale scatter fits and regression coefficients.
+
+    Parameters
+    ----------
+    parameters : pandas.DataFrame
+        Merged per-(participant, session) parameters and subscale scores, as
+        built in `compare_parameters_to_questionnaires`.
+    array_cols : list of str
+        Questionnaire subscale columns (first 3) followed by model
+        parameter columns.
+    mdls : dict of int -> statsmodels regression result
+        One fitted OLS model per parameter, keyed by index into `param_names`.
+    param_names : list of str
+        Model parameter names, in the same order as `mdls`' keys.
+    """
     questionnaire_vars = array_cols[:3]
 
     fig, axes = plt.subplots(

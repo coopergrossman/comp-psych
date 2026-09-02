@@ -16,6 +16,14 @@ import os
 
 
 def plot_bonuses(bonuses):
+    """Plot per-session histograms of computed bonus amounts.
+
+    Parameters
+    ----------
+    bonuses : numpy.ndarray
+        Per-subject, per-session bonus array, as computed by
+        `determine_bonuses`.
+    """
     # Plot results
     num_sessions = np.where(~np.isnan(bonuses))[1].max() + 1
     plt.figure(figsize=(1, num_sessions))
@@ -32,6 +40,26 @@ def plot_bonuses(bonuses):
 
 
 def save_bonuses(bonuses, min_bonus, subject_ids, session_name):
+    """Write per-participant bonus amounts to a CSV keyed on the session's demographic export.
+
+    Parameters
+    ----------
+    bonuses : numpy.ndarray
+        Per-subject, per-session bonus array, indexed in the same subject
+        order as `subject_ids`.
+    min_bonus : float
+        Fallback bonus for subjects with no computed value for this session.
+    subject_ids : Sequence of str
+        Participant IDs, in the same order as `bonuses`' rows.
+    session_name : str
+        Session name (e.g. 's3_groupC'); must match an existing
+        `DEMOGRAPHICS_DIR/{session_name}.csv` demographic export.
+
+    Raises
+    ------
+    ValueError
+        If `session_name` is None or has no matching demographic CSV.
+    """
     # Save bonuses to CSV
     demo_path = os.path.join(DEMOGRAPHICS_DIR, session_name + '.csv')
 
@@ -61,7 +89,29 @@ def save_bonuses(bonuses, min_bonus, subject_ids, session_name):
 
 
 def determine_bonuses(subselect=None, plot_flag=False, session_name=None):
-    
+    """Compute and save performance-based bonuses for one session.
+
+    Bonus scales linearly with `corr_prob + win_prob` between
+    `base_performance` (<=15th percentile, pays `min_bonus`) and
+    `max_performance` (>=85th percentile, pays `max_bonus`), clipped to that
+    range and rounded to the nearest cent.
+
+    Parameters
+    ----------
+    subselect : dict, optional
+        Filter criteria passed through to `analyze_performance`.
+    plot_flag : bool, default False
+        If True, show per-session bonus histograms via `plot_bonuses`.
+    session_name : str
+        Session name (e.g. 's3_groupC'); required, and must match an
+        existing `DEMOGRAPHICS_DIR/{session_name}.csv` demographic export
+        (see `save_bonuses`).
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per subject, with `subject_id` and the per-session `bonuses` array.
+    """
     # analyze behavior performance
     _, bd = analyze_performance(subselect=subselect, plot_flag=False)
     corr_prob = np.vstack(bd['corr_prob'].to_numpy())

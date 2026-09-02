@@ -17,11 +17,42 @@ from cmdstanpy import CmdStanModel
 
 
 def format_data(data, subjects):
+    """Add Stan-input helper columns to trial data.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Trial-level data with `chosenStimID`, `rightStimID`, and `trialType` columns.
+    subjects : array-like
+        Unused; kept for interface symmetry with callers that pass it.
+
+    Returns
+    -------
+    pandas.DataFrame
+        `data` with `action` (1 if the right-hand stimulus was chosen) and
+        `block_loss` (1 for loss-block trials) columns added.
+    """
     data['action'] = (data['chosenStimID'] == data['rightStimID']).astype(int)
     data['block_loss'] = (data['trialType'] == 'loss').astype(int)
     return data
 
 def save_stan_outputs(save_path, samples, summary, param_estimates, subj_param_estimates):
+    """Save one participant's Stan fit outputs to `save_path`.
+
+    Parameters
+    ----------
+    save_path : str or pathlib.Path
+        Destination directory (created by the CmdStan run itself).
+    samples : pandas.DataFrame
+        Posterior draws (`fit.draws_pd()`), saved as `samples.parquet`.
+    summary : pandas.DataFrame
+        CmdStan fit summary (`fit.summary()`), saved as `summary.csv`.
+    param_estimates : numpy.ndarray
+        Per-session MAP estimates, saved (with `subj_param_estimates`) into
+        `param_estimates.npz`.
+    subj_param_estimates : numpy.ndarray
+        Subject-level MAP estimates.
+    """
     # Save numeric arrays (NumPy-stable)
     np.savez_compressed(
         os.path.join(save_path, 'param_estimates.npz'),
@@ -41,10 +72,44 @@ def fit_stan_model(
         num_chains=4, 
         delta=0.9, 
         model_name='q', 
-        save_flag=True, 
+        save_flag=True,
         force_rerun=False
 ):
-    
+    """Fit a Stan Q-learning model to each subject's gain_loss data, session by session.
+
+    Subjects with 2 or fewer sessions are skipped (not enough data for a
+    per-session fit). By default, subjects whose output directory already
+    exists are skipped too (see `force_rerun`). Note: MCMC sampling below is
+    not seeded, so re-fitting a subject can yield slightly different results.
+
+    Parameters
+    ----------
+    subselect : dict, optional
+        Filter criteria passed to `comp_psych.core.selection.subselect_data`
+        via `load_gain_loss_data`.
+    iter : int, default 2000
+        Number of post-warmup MCMC sampling iterations per chain.
+    warmup : int, optional
+        Number of warmup iterations per chain; defaults to `iter // 2`.
+    num_chains : int, default 4
+        Number of MCMC chains.
+    delta : float, default 0.9
+        Target acceptance rate (`adapt_delta`) for the NUTS sampler.
+    model_name : str, default 'q'
+        Stan model to fit; must match a `.stan` file in
+        `comp_psych.gain_loss.config.MODEL_DIR` and a
+        `comp_psych.gain_loss.modeling.get_param_names` entry.
+    save_flag : bool, default True
+        If True, save each subject's fit outputs via `save_stan_outputs`.
+    force_rerun : bool, default False
+        If True, refit subjects even if their output directory already exists.
+
+    Notes
+    -----
+    Writes to `MODEL_SAVE_DIR/{model_name}/{participant_id}/` per subject;
+    nothing is returned.
+    """
+
     if warmup is None:
         warmup = iter // 2
 

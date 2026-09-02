@@ -13,6 +13,23 @@ from comp_psych.gain_loss.load import load_gain_loss_data
 
 
 def format_data(data):
+    """Prepare trial data for reversal-transition analysis.
+
+    Suppresses a `prob_reversal` flag on trials that coincide with a
+    stimulus-set `block_change` (not a true probability reversal), and adds
+    numeric `is_correct_bin` and `block_loss` helper columns.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Trial-level data with `prob_reversal`, `block_change`, `is_correct`,
+        and `trialType` columns.
+
+    Returns
+    -------
+    pandas.DataFrame
+        `data` with the columns above adjusted/added in place.
+    """
     data.loc[
         (data['prob_reversal'] == 1) & (data['block_change'] == 1),
         'prob_reversal'
@@ -24,6 +41,30 @@ def format_data(data):
 
 
 def analyze_transition_behavior(subselect=None, plot_flag=True):
+    """Extract choice-correctness trajectories around probability-reversal trials.
+
+    For each reversal trial, collects `is_correct` for a fixed window of
+    trials before and after, then groups those windows overall, by
+    gain/loss block, and by session.
+
+    Parameters
+    ----------
+    subselect : dict, optional
+        Filter criteria passed to `comp_psych.core.selection.subselect_data`
+        via `load_gain_loss_data`.
+    plot_flag : bool, default True
+        If True, show reversal-aligned performance plots via
+        `plot_transition_behavior`.
+
+    Returns
+    -------
+    dict
+        Keys `transition`, `transition_gain`, `transition_loss`,
+        `transition_session`, `transition_session_gain`,
+        `transition_session_loss`; each a list of
+        `(trials_before + trials_after + 1)`-length arrays, one per reversal
+        (or, for the `_session` variants, one list of such arrays per session).
+    """
     # Load data and subselect data, remove dropped and practice trials by default
     data = load_gain_loss_data(subselect=subselect, subselect_defaults=True)
     num_sessions = data['session_id'].str[1].nunique()
@@ -81,6 +122,17 @@ def analyze_transition_behavior(subselect=None, plot_flag=True):
 
 
 def plot_transition_behavior(transition, transition_gain, transition_loss, transition_session, transition_session_gain, transition_session_loss, num_sessions, trials_before, trials_after):
+    """Plot mean P(correct) around probability reversals, overall/by block/by session.
+
+    Parameters
+    ----------
+    transition, transition_gain, transition_loss, transition_session, transition_session_gain, transition_session_loss : array-like
+        As returned by `analyze_transition_behavior`.
+    num_sessions : int
+        Number of sessions.
+    trials_before, trials_after : int
+        Number of trials shown before/after each reversal.
+    """
 
     mean_transition = np.nanmean(transition, axis=0)
     sem_transition = np.nanstd(transition, axis=0) / np.sqrt(transition.shape[0])

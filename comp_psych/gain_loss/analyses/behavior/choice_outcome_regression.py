@@ -15,6 +15,30 @@ from comp_psych.gain_loss.load import load_gain_loss_data
 
 
 def choice_outcome_regression(subselect=None, plot_flag=True, num_trials=5):
+    """Fit per-subject logistic regressions of choice on recent win/lose history.
+
+    For each subject, regresses `choice` on the past `num_trials` trials'
+    win and lose outcomes (signed by which stimulus was chosen), fit
+    separately on all trials, gain-block trials, and loss-block trials.
+
+    Parameters
+    ----------
+    subselect : dict, optional
+        Filter criteria passed to `comp_psych.core.selection.subselect_data`
+        via `load_gain_loss_data`.
+    plot_flag : bool, default True
+        If True, show mean regression-coefficient plots via
+        `plot_choice_outcome_regression`.
+    num_trials : int, default 5
+        Number of trials of lagged win/lose history to include as predictors.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per subject, with `subject_id` and `num_trials`-length
+        coefficient arrays for win/lose history, overall and split by
+        gain/loss block.
+    """
     # Load and subselect data, remove dropped and practice trials by default
     data = load_gain_loss_data(subselect=subselect, subselect_defaults=True)
 
@@ -31,8 +55,12 @@ def choice_outcome_regression(subselect=None, plot_flag=True, num_trials=5):
     for s_ind, subj in enumerate(subjs):
         subj_data = data[data['participant_id'] == subj].copy()
         subj_data['choice_val'] = subj_data['choice'].replace(0,-1)
-        subj_data['win_choice'] = pd.to_numeric(subj_data['is_win'] * subj_data['choice_val'])
-        subj_data['lose_choice'] = pd.to_numeric((1 - subj_data['is_win']) * subj_data['choice_val'])
+        # is_win is nullable boolean (pd.NA on trials with missing amount); cast to
+        # plain float so those trials become NaN instead of pd.NA, which statsmodels/
+        # patsy can't handle downstream.
+        is_win = subj_data['is_win'].astype(float)
+        subj_data['win_choice'] = pd.to_numeric(is_win * subj_data['choice_val'])
+        subj_data['lose_choice'] = pd.to_numeric((1 - is_win) * subj_data['choice_val'])
 
         for t_ind in range(num_trials):
             subj_data[f'win_{t_ind+1}'] = subj_data['win_choice'].shift(t_ind + 1)
@@ -79,6 +107,16 @@ def choice_outcome_regression(subselect=None, plot_flag=True, num_trials=5):
 
 
 def plot_choice_outcome_regression(win_coefs, lose_coefs, win_coefs_gain, lose_coefs_gain, win_coefs_loss, lose_coefs_loss, num_trials):
+    """Plot mean win/lose regression coefficients by trial lag, overall and by block type.
+
+    Parameters
+    ----------
+    win_coefs, lose_coefs, win_coefs_gain, lose_coefs_gain, win_coefs_loss, lose_coefs_loss : numpy.ndarray
+        Per-subject, per-lag coefficient arrays as computed by
+        `choice_outcome_regression`.
+    num_trials : int
+        Number of trial lags (columns of the arrays above).
+    """
     # Plot results
     trials = np.arange(1, num_trials + 1)
     plt.figure(figsize=(8, 4))

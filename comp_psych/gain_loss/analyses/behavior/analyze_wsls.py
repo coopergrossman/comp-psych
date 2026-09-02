@@ -12,7 +12,31 @@ import matplotlib.pyplot as plt
 from comp_psych.gain_loss.load import load_gain_loss_data
 
 
-def analyze_wsls(subselect=None, plot_flag=True):    
+def analyze_wsls(subselect=None, plot_flag=True):
+    """Compute per-subject, per-session win-stay and lose-shift probabilities.
+
+    A "stay" is choosing the same stimulus ID as the previous trial; trials
+    immediately after a `block_change` are excluded (no valid "previous
+    trial" to compare against).
+
+    Parameters
+    ----------
+    subselect : dict, optional
+        Filter criteria passed to `comp_psych.core.selection.subselect_data`
+        via `load_gain_loss_data`.
+    plot_flag : bool, default True
+        If True, show session-averaged win-stay/lose-shift plots via
+        `plot_wsls`.
+
+    Returns
+    -------
+    data : pandas.DataFrame
+        The loaded, subselected trial-level data.
+    summary : pandas.DataFrame
+        One row per subject, with `participant_id` and win-stay/lose-shift
+        probability arrays (one value per session, overall and split by
+        gain/loss block).
+    """
     # Load and subselect data, remove dropped and practice trials by default
     data = load_gain_loss_data(subselect=subselect, subselect_defaults=True)
 
@@ -65,6 +89,15 @@ def analyze_wsls(subselect=None, plot_flag=True):
 
 
 def plot_wsls(win_stay, lose_shift, win_stay_gain, lose_shift_gain, win_stay_loss, lose_shift_loss, num_sessions):
+    """Plot session-averaged win-stay/lose-shift probabilities, overall and by block type.
+
+    Parameters
+    ----------
+    win_stay, lose_shift, win_stay_gain, lose_shift_gain, win_stay_loss, lose_shift_loss : numpy.ndarray
+        Per-subject, per-session arrays as computed by `analyze_wsls`.
+    num_sessions : int
+        Number of sessions (columns of the arrays above).
+    """
     # Plot results
     sessions = np.arange(1, num_sessions + 1)
     plt.figure(figsize=(6, 8))
